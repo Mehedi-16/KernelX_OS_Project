@@ -1,0 +1,416 @@
+<style>
+  /* ============ MODULE 4: DEADLOCK & BANKER'S STYLES ============ */
+  .bankers-grid {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+  @media (max-width: 1100px) { .bankers-grid { grid-template-columns: 1fr; } }
+
+  .bankers-panel-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+  }
+
+  .block-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 18px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--running);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+  }
+
+  .vector-input-group {
+    display: flex;
+    gap: 15px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    padding: 12px;
+    border-radius: var(--radius);
+    margin-bottom: 15px;
+    align-items: center;
+  }
+
+  .res-input {
+    width: 50px !important;
+    text-align: center;
+  }
+
+  .matrix-cell-group {
+    display: flex;
+    gap: 4px;
+  }
+  .matrix-cell-group input {
+    width: 42px !important;
+    padding: 6px !important;
+    text-align: center;
+  }
+
+  .status-banner {
+    padding: 15px;
+    border-radius: var(--radius);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    margin-top: 15px;
+    border: 1px solid transparent;
+    display: none;
+  }
+  .status-banner.safe {
+    background: rgba(61, 220, 151, 0.1);
+    border-color: var(--ready);
+    color: var(--ready);
+  }
+  .status-banner.unsafe {
+    background: rgba(255, 92, 92, 0.1);
+    border-color: var(--fault);
+    color: var(--fault);
+  }
+</style>
+
+<div class="bankers-grid">
+  <div class="bankers-panel-block">
+    <div class="block-header">// Resource Allocation & Max Demand Space</div>
+    
+    <table class="sched-table">
+      <thead>
+        <tr>
+          <th>PID</th>
+          <th>Allocation (A B C)</th>
+          <th>Max Demand (A B C)</th>
+        </tr>
+      </thead>
+      <tbody id="bankers-matrix-body">
+        <tr>
+          <td>P0</td>
+          <td>
+            <div class="matrix-cell-group">
+              <input type="number" class="alloc-a" value="0" min="0">
+              <input type="number" class="alloc-b" value="1" min="0">
+              <input type="number" class="alloc-c" value="0" min="0">
+            </div>
+          </td>
+          <td>
+            <div class="matrix-cell-group">
+              <input type="number" class="max-a" value="7" min="0">
+              <input type="number" class="max-b" value="5" min="0">
+              <input type="number" class="max-c" value="3" min="0">
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td>P1</td>
+          <td>
+            <div class="matrix-cell-group">
+              <input type="number" class="alloc-a" value="2" min="0">
+              <input type="number" class="alloc-b" value="0" min="0">
+              <input type="number" class="alloc-c" value="0" min="0">
+            </div>
+          </td>
+          <td>
+            <div class="matrix-cell-group">
+              <input type="number" class="max-a" value="3" min="0">
+              <input type="number" class="max-b" value="2" min="0">
+              <input type="number" class="max-c" value="2" min="0">
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td>P2</td>
+          <td>
+            <div class="matrix-cell-group">
+              <input type="number" class="alloc-a" value="3" min="0">
+              <input type="number" class="alloc-b" value="0" min="0">
+              <input type="number" class="alloc-c" value="2" min="0">
+            </div>
+          </td>
+          <td>
+            <div class="matrix-cell-group">
+              <input type="number" class="max-a" value="9" min="0">
+              <input type="number" class="max-b" value="0" min="0">
+              <input type="number" class="max-c" value="2" min="0">
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td>P3</td>
+          <td>
+            <div class="matrix-cell-group">
+              <input type="number" class="alloc-a" value="2" min="0">
+              <input type="number" class="alloc-b" value="1" min="0">
+              <input type="number" class="alloc-c" value="1" min="0">
+            </div>
+          </td>
+          <td>
+            <div class="matrix-cell-group">
+              <input type="number" class="max-a" value="2" min="0">
+              <input type="number" class="max-b" value="2" min="0">
+              <input type="number" class="max-c" value="2" min="0">
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="bankers-panel-block">
+    <div class="block-header">Total Available Instance Pool</div>
+    
+    <div class="vector-input-group">
+      <span style="font-family:var(--font-mono); font-size:12px; color:var(--text-dim);">Available Vector [A, B, C]:</span>
+      <input type="number" id="avail-a" class="res-input" value="3">
+      <input type="number" id="avail-b" class="res-input" value="3">
+      <input type="number" id="avail-c" class="res-input" value="2">
+    </div>
+
+    <button class="btn-run" onclick="runBankersSafetyAlgorithm()" style="width: 100%; padding: 12px; margin-top: 10px;">Audit System Safety State</button>
+    
+    <div id="bankers-banner" class="status-banner"></div>
+  </div>
+</div>
+
+<div class="bankers-panel-block">
+  <div class="block-header"> Dynamic System Live Need Matrix File [Need = Max - Allocation]</div>
+  <table class="sched-table">
+    <thead>
+      <tr>
+        <th>PID</th>
+        <th>Calculated Need (A B C)</th>
+        <th>Execution Status</th>
+      </tr>
+    </thead>
+    <tbody id="bankers-need-body">
+      <tr><td>P0</td><td>-- -- --</td><td><span style="color:var(--text-dimmer)">Awaiting Audit</span></td></tr>
+      <tr><td>P1</td><td>-- -- --</td><td><span style="color:var(--text-dimmer)">Awaiting Audit</span></td></tr>
+      <tr><td>P2</td><td>-- -- --</td><td><span style="color:var(--text-dimmer)">Awaiting Audit</span></td></tr>
+      <tr><td>P3</td><td>-- -- --</td><td><span style="color:var(--text-dimmer)">Awaiting Audit</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+  // গ্লোবাল স্টেট ট্র্যাকার (স্টেপ-বাই-স্টেপ মোডের জন্য)
+  let bsState = {
+    running: false,
+    n: 0,
+    alloc: [],
+    need: [],
+    avail: [],
+    work: [],
+    finish: [],
+    safeSequence: [],
+    rows: null,
+    flag: true
+  };
+
+  async function runBankersSafetyAlgorithm() {
+    // যদি অলরেডি স্টেপ মোড রানিং থাকে, তবে এই বাটনটিই "Next Step" হিসেবে কাজ করবে
+    if (bsState.running) {
+      executeNextBankersStep();
+      return;
+    }
+
+    if(window.KernelXLog) window.KernelXLog("Deadlock Monitor: Initiating Step-by-Step Memory Audit Engine...", "warn");
+    
+    const rows = document.getElementById('bankers-matrix-body').rows;
+    const n = rows.length;
+    window.lastBankersRows = rows;
+    
+    // ১. গ্লোবাল স্টেট ইনিশিয়ালাইজেশন (Gather Inputs)
+    bsState.running = true;
+    bsState.n = n;
+    bsState.rows = rows;
+    bsState.alloc = [];
+    bsState.need = [];
+    bsState.finish = new Array(n).fill(false);
+    bsState.safeSequence = [];
+    bsState.flag = true;
+
+    for(let i=0; i<n; i++) {
+      let aa = parseInt(rows[i].querySelector('.alloc-a').value) || 0;
+      let ab = parseInt(rows[i].querySelector('.alloc-b').value) || 0;
+      let ac = parseInt(rows[i].querySelector('.alloc-c').value) || 0;
+      bsState.alloc.push([aa, ab, ac]);
+
+      let ma = parseInt(rows[i].querySelector('.max-a').value) || 0;
+      let mb = parseInt(rows[i].querySelector('.max-b').value) || 0;
+      let mc = parseInt(rows[i].querySelector('.max-c').value) || 0;
+
+      bsState.need.push([ma - aa, mb - ab, mc - ac]);
+    }
+
+    bsState.avail = [
+      parseInt(document.getElementById('avail-a').value) || 0,
+      parseInt(document.getElementById('avail-b').value) || 0,
+      parseInt(document.getElementById('avail-c').value) || 0
+    ];
+    bsState.work = [...bsState.avail];
+
+    // ২. মেইন বাটনের টেক্সট চেঞ্জ করে "Next Step" বানানো
+    const mainBtn = document.querySelector('.btn-run');
+    mainBtn.innerText = "➡️ Execute Next Audit Step";
+    mainBtn.style.background = "var(--running)";
+
+    // ৩. লাইভ নিড ম্যাট্রিক্স রেন্ডার করা
+    const needBody = document.getElementById('bankers-need-body');
+    needBody.innerHTML = '';
+    for(let i=0; i<n; i++) {
+      needBody.innerHTML += `
+        <tr id="need-row-${i}">
+          <td>P${i}</td>
+          <td style="font-family:var(--font-mono); letter-spacing: 4px;">[${bsState.need[i][0]} ${bsState.need[i][1]} ${bsState.need[i][2]}]</td>
+          <td id="need-status-${i}" style="color:var(--text-dim)">Ready for Evaluation...</td>
+        </tr>
+      `;
+    }
+
+    if(window.KernelXLog) window.KernelXLog(`Step Mode Armed: Available Vector is [${bsState.work}]. Click the button to scan processes.`);
+    
+    // প্রথম স্টেপটি অটোমেটিক ট্রিগার করা
+    executeNextBankersStep();
+  }
+
+  // স্যারের সামনে একটা একটা করে ক্লিক করে রান করার কোর লজিক
+  function executeNextBankersStep() {
+    const n = bsState.n;
+    let stepFound = false;
+
+    // ক্লিয়ারিং প্রিভিয়াস হাইলাইট কালার
+    for(let i=0; i<n; i++) {
+      let row = document.getElementById(`need-row-${i}`);
+      if(row && !bsState.finish[i]) row.style.background = 'none';
+    }
+
+    // রেডি কিউ বা প্রসেস পুল স্ক্যান করা
+    for(let i=0; i<n; i++) {
+      if(!bsState.finish[i]) {
+        // হাইলাইট করা যে কার্নেল এখন এই নির্দিষ্ট প্রсеসটি অডিট করছে
+        document.getElementById(`need-row-${i}`).style.background = 'rgba(255, 180, 84, 0.15)';
+        
+        let nA = bsState.need[i][0], nB = bsState.need[i][1], nC = bsState.need[i][2];
+        let wA = bsState.work[0], wB = bsState.work[1], wC = bsState.work[2];
+
+        // কন্ডিশন চেক: Need <= Available (Work)
+        if(nA <= wA && nB <= wB && nC <= wC) {
+          // রিসোর্স রিফান্ড বা এলোকেশন পুল গ্রো করা
+          bsState.work[0] += bsState.alloc[i][0];
+          bsState.work[1] += bsState.alloc[i][1];
+          bsState.work[2] += bsState.alloc[i][2];
+          
+          bsState.finish[i] = true;
+          bsState.safeSequence.push(`P${i}`);
+          stepFound = true;
+
+          // UI আপডেট
+          document.getElementById(`need-status-${i}`).innerText = `Completed ➔ Released [${bsState.alloc[i]}]`;
+          document.getElementById(`need-status-${i}`).style.color = "var(--ready)";
+          document.getElementById(`need-row-${i}`).style.background = 'rgba(61, 220, 151, 0.08)';
+          
+          if(window.KernelXLog) window.KernelXLog(`[STEP MATCH]: P${i} requirements met. New Avail Pool: [${bsState.work}]`, "ok");
+          break; // একটি স্টেপ সম্পন্ন হলে লুপ ব্রেক করবে, যাতে ইউজার আবার ক্লিক করার সুযোগ পায়
+        } else {
+          document.getElementById(`need-status-${i}`).innerText = `Skipped ➔ Need [${nA},${nB},${nC}] > Avail [${wA},${wB},${wC}]`;
+          document.getElementById(`need-status-${i}`).style.color = "var(--running)";
+          if(window.KernelXLog) window.KernelXLog(`[STEP SKIP]: P${i} starved due to low resources. Moving next.`);
+        }
+      }
+    }
+
+    // যদি কোনো রাউন্ডে একটাও ম্যাচ না পাওয়া যায় অথবা সব প্রসেস শেষ হয়ে যায় ➔ ফাইনাল রেজাল্ট
+    let totalFinished = bsState.finish.filter(x => x).length;
+    
+    if(!stepFound || totalFinished === n) {
+      renderFinalVerdict();
+    }
+  }
+
+  function renderFinalVerdict() {
+    bsState.running = false;
+    const n = bsState.n;
+    const banner = document.getElementById('bankers-banner');
+    banner.style.display = "block";
+    
+    // মেইন বাটন রিসেট
+    const mainBtn = document.querySelector('.btn-run');
+    mainBtn.innerText = "Audit System Safety State";
+    mainBtn.style.background = "";
+
+    if(bsState.safeSequence.length === n) {
+      banner.className = "status-banner safe";
+      banner.innerHTML = `<strong>✔ SYSTEM STATUS: SAFE STATE</strong><br>Deadlock Avoided. Safe Execution Sequence: <strong>${bsState.safeSequence.join(' ➔ ')}</strong>`;
+      if(window.KernelXLog) window.KernelXLog("Kernel Audit Complete: System state verified as SAFE.", "ok");
+      
+      const cpuStat = document.getElementById('stat-cpu');
+      if(cpuStat) cpuStat.textContent = "12%";
+    } else {
+      banner.className = "status-banner unsafe";
+      banner.innerHTML = `
+        <strong>✖ SYSTEM STATUS: UNSAFE STATE (DEADLOCK DETECTED)</strong><br>
+        Threads are permanently interlocked.<br>
+        <button onclick="triggerKernelDeadlockRecovery()" style="margin-top: 10px; background: var(--fault); color: white; border: none; padding: 6px 12px; font-weight: bold; width:100%;">
+          ⚡ Launch Kernel Recovery Engine (Kill Rogue Thread)
+        </button>
+      `;
+      
+      if(window.KernelXLog) window.KernelXLog("CRITICAL TRAP: Deadlock confirmed!", "err");
+      
+      const cpuStat = document.getElementById('stat-cpu');
+      if(cpuStat) cpuStat.textContent = "99% (STALLED)";
+      
+      for(let i=0; i<n; i++) {
+        if(!bsState.finish[i]) {
+          document.getElementById(`need-status-${i}`).innerText = "DEADLOCKED / STALLED";
+          document.getElementById(`need-status-${i}`).style.color = "var(--fault)";
+          document.getElementById(`need-row-${i}`).style.background = 'rgba(255, 92, 92, 0.08)';
+        }
+      }
+    }
+  }
+
+  function triggerKernelDeadlockRecovery() {
+    if(!window.lastBankersRows) return;
+    const rows = window.lastBankersRows;
+    let maxAllocatedPID = -1;
+    let maxAllocatedSum = -1;
+
+    for(let i=0; i<rows.length; i++) {
+      let statusText = document.getElementById(`need-status-${i}`).innerText;
+      if (statusText.includes("DEADLOCKED") || statusText.includes("Skipped")) {
+        let aa = parseInt(rows[i].querySelector('.alloc-a').value) || 0;
+        let ab = parseInt(rows[i].querySelector('.alloc-b').value) || 0;
+        let ac = parseInt(rows[i].querySelector('.alloc-c').value) || 0;
+        let totalAllocated = aa + ab + ac;
+
+        if(totalAllocated > maxAllocatedSum) {
+          maxAllocatedSum = totalAllocated;
+          maxAllocatedPID = i;
+        }
+      }
+    }
+
+    if(maxAllocatedPID !== -1) {
+      if(window.KernelXLog) window.KernelXLog(`[RECOVERY]: Evicting P${maxAllocatedPID}. Sending Force Kill Signal...`, 'err');
+      
+      let aaInput = rows[maxAllocatedPID].querySelector('.alloc-a');
+      let abInput = rows[maxAllocatedPID].querySelector('.alloc-b');
+      let acInput = rows[maxAllocatedPID].querySelector('.alloc-c');
+      
+      document.getElementById('avail-a').value = parseInt(document.getElementById('avail-a').value) + (parseInt(aaInput.value) || 0);
+      document.getElementById('avail-b').value = parseInt(document.getElementById('avail-b').value) + (parseInt(abInput.value) || 0);
+      document.getElementById('avail-c').value = parseInt(document.getElementById('avail-c').value) + (parseInt(acInput.value) || 0);
+
+      aaInput.value = 0; abInput.value = 0; acInput.value = 0;
+      if(window.KernelXLog) window.KernelXLog(`[RECOVERY SUCCESS]: Resources released. Resetting simulation context...`, 'ok');
+      
+      // স্টেট ক্লিন করে নতুনভাবে রান করা
+      bsState.running = false;
+      runBankersSafetyAlgorithm();
+    }
+  }
+</script>

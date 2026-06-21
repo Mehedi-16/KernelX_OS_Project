@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KernelX</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ============ TOKENS ============ */
+  :root {
+    --bg: #0B0E14;
+    --surface: #141923;
+    --surface-2: #1B2230;
+    --border: #252B3A;
+    --border-bright: #343C50;
+    --text: #E4E7EC;
+    --text-dim: #6B7280;
+    --text-dimmer: #454C5C;
+
+    --ready: #3DDC97;
+    --running: #FFB454;
+    --waiting: #6E9FFF;
+    --terminated: #4B5563;
+    --fault: #FF5C5C;
+
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-sans: 'Inter', sans-serif;
+
+    --radius: 6px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    height: 100%;
+    overflow-x: hidden;
+  }
+
+  /* ============ BOOT SEQUENCE ============ */
+  #boot-screen {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: 999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  #boot-log { font-family: var(--font-mono); font-size: 13px; line-height: 1.9; color: var(--text-dim); max-width: 560px; width: 100%; }
+  #boot-log .line { opacity: 0; transition: opacity 0.15s ease; }
+  #boot-log .ok { color: var(--ready); font-weight: 700; }
+  #boot-log .tag { color: var(--text-dimmer); }
+  #boot-log .target { color: var(--text); }
+  #boot-screen.hide { animation: bootFadeOut 0.5s ease forwards; pointer-events: none; }
+  @keyframes bootFadeOut { to { opacity: 0; } }
+
+  #app { opacity: 0; min-height: 100vh; display: flex; flex-direction: column; }
+  #app.ready { animation: appFadeIn 0.6s ease forwards; }
+  @keyframes appFadeIn { to { opacity: 1; } }
+
+  header { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+  .brand { display: flex; align-items: baseline; gap: 10px; }
+  .brand-mark { font-family: var(--font-mono); font-weight: 800; font-size: 19px; color: var(--text); }
+  .brand-mark span { color: var(--running); }
+  .brand-sub { font-size: 11px; color: var(--text-dim); font-family: var(--font-mono); }
+
+  .header-right { display: flex; align-items: center; gap: 18px; }
+  #clock { font-family: var(--font-mono); font-size: 13px; color: var(--text-dim); }
+  .status-pill { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--ready); border: 1px solid var(--border-bright); padding: 4px 10px; border-radius: 100px; }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ready); animation: blink 1.5s infinite; }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  nav { display: flex; gap: 2px; padding: 0 24px; background: var(--surface); border-bottom: 1px solid var(--border); overflow-x: auto; flex-shrink: 0; }
+  .tab { font-family: var(--font-mono); font-size: 13px; color: var(--text-dim); background: none; border: none; padding: 12px 16px; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; transition: all 0.2s ease; }
+  .tab .num { color: var(--text-dimmer); font-size: 11px; margin-right: 6px; }
+  .tab.active { color: var(--text); border-bottom-color: var(--running); background: rgba(255,180,84, 0.02); }
+  .tab:hover:not(.active) { color: var(--text); background: rgba(255,255,255,0.02); }
+
+  main { flex: 1; padding: 24px; overflow-y: auto; }
+
+  /* ============ GLOBAL SUB-MODULE TABLE & INPUT FIXES ============ */
+  .sched-table {
+    width: 100% !important;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+    font-family: var(--font-mono) !important;
+    font-size: 12px !important;
+    text-align: left !important;
+    margin-top: 12px !important;
+  }
+  .sched-table th {
+    color: var(--text-dim) !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.8px !important;
+    padding: 12px 20px !important; 
+    border-bottom: 1px solid var(--border-bright) !important;
+  }
+  .sched-table td {
+    padding: 12px 20px !important;
+    border-bottom: 1px solid var(--border) !important;
+    white-space: nowrap !important;
+  }
+  
+  select, input[type="number"], input[type="text"] {
+    background: var(--bg) !important;
+    color: var(--text) !important;
+    border: 1px solid var(--border-bright) !important;
+    padding: 8px 12px !important;
+    border-radius: var(--radius) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 12px !important;
+    outline: none !important;
+    transition: border-color 0.2s;
+  }
+  select:focus, input:focus { border-color: var(--running) !important; }
+
+  /* ============ BOTTOM STRIP ============ */
+  #bottom-strip { flex-shrink: 0; border-top: 1px solid var(--border); background: var(--surface); display: grid; grid-template-columns: 1fr 1.4fr; height: 168px; }
+  .strip-section { padding: 14px 20px; overflow-y: auto; }
+  .strip-section + .strip-section { border-left: 1px solid var(--border); }
+  .strip-title { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); text-transform: uppercase; margin-bottom: 10px; letter-spacing: 0.5px; }
+  .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .stat { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; }
+  .stat-label { font-size: 10px; color: var(--text-dim); margin-bottom: 4px; }
+  .stat-value { font-family: var(--font-mono); font-size: 15px; font-weight: 600; color: var(--text); transition: color 0.3s ease; }
+  .stat-value.accent { color: var(--ready); }
+  #log-console { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); line-height: 1.8; }
+  #log-console .entry { display: flex; gap: 10px; margin-bottom: 2px; }
+  #log-console .ts { color: var(--text-dimmer); }
+</style>
+</head>
+<body>
+
+  <div id="boot-screen"><div id="boot-log"></div></div>
+
+  <div id="app">
+    <header>
+      <div class="brand">
+        <div class="brand-mark">Kernel<span>X</span></div>
+        <div class="brand-sub">v1.0 · core engine simulator</div>
+      </div>
+      <div class="header-right">
+        <div id="clock">00:00:00</div>
+        <div class="status-pill"><span class="status-dot"></span> kernel running</div>
+      </div>
+    </header>
+
+    <nav id="tabs">
+      <button class="tab active" data-page="scheduler.html"><span class="num">01</span> Process &amp; Scheduler</button>
+      <button class="tab" data-page="memory.html"><span class="num">02</span> Virtual Memory</button>
+      <button class="tab" data-page="allocator.html"><span class="num">03</span> Memory Allocator</button>
+      <button class="tab" data-page="bankers.html"><span class="num">04</span> Deadlock &amp; Banker's</button>
+    </nav>
+
+    <main id="module-container"></main>
+
+    <div id="bottom-strip">
+      <div class="strip-section">
+        <div class="strip-title">System Monitor</div>
+        <div class="stat-grid">
+          <div class="stat"><div class="stat-label">CPU Usage</div><div class="stat-value accent" id="stat-cpu">0%</div></div>
+          <div class="stat"><div class="stat-label">RAM Usage</div><div class="stat-value" id="stat-ram">0%</div></div>
+          <div class="stat"><div class="stat-label">Processes</div><div class="stat-value" id="stat-proc">5</div></div>
+          <div class="stat"><div class="stat-label">TLB Hit Rate</div><div class="stat-value" id="stat-tlb">92.4%</div></div>
+          <div class="stat"><div class="stat-label">Page Faults</div><div class="stat-value" id="stat-faults">0</div></div>
+          <div class="stat"><div class="stat-label">Uptime</div><div class="stat-value" id="stat-uptime">00:00</div></div>
+        </div>
+      </div>
+      <div class="strip-section">
+        <div class="strip-title">Kernel Log Console</div>
+        <div id="log-console"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // ============ GLOBAL STATE REGISTER ============
+  window.KernelXState = {
+    activeModule: '',
+    totalProcesses: 5,
+    pageFaults: 0
+  };
+
+  // ============ GLOBAL BOOT SEQUENCE ============
+  const bootLines = [
+    { tag: '[ OK ]', text: 'Booting KernelX microkernel architecture...', cls: 'ok' },
+    { tag: '[ OK ]', text: 'Mapping subsystem virtual registers...', cls: 'ok' },
+    { tag: '[ READY ]', text: 'KernelX Core Simulator Interoperability Matrix Stable.', cls: 'ok' }
+  ];
+  const bootLog = document.getElementById('boot-log');
+  bootLines.forEach((line, i) => {
+    const div = document.createElement('div'); div.className = 'line';
+    div.innerHTML = `<span class="tag ${line.cls}">${line.tag}</span> <span class="target">${line.text}</span>`;
+    bootLog.appendChild(div);
+    setTimeout(() => { div.style.opacity = '1'; }, i * 250);
+  });
+  
+  setTimeout(() => {
+    document.getElementById('boot-screen').classList.add('hide');
+    document.getElementById('app').classList.add('ready');
+    loadModule('scheduler.html');
+    startSystemMonitorMetrics();
+  }, 950);
+
+  // ============ DYNAMIC MODULE ROUTER ============
+  async function loadModule(url) {
+    try {
+      window.KernelXState.activeModule = url;
+      const response = await fetch(url);
+      
+      // CORS Error হ্যান্ডলিং ও ইউজার ফ্রেন্ডলি মেসেজ
+      if (!response.ok) throw new Error(`HTTP Error Status: ${response.status}`);
+      
+      const html = await response.text();
+      const container = document.getElementById('module-container');
+      container.innerHTML = html;
+      
+      // স্ক্রিপ্ট এক্সিকিউশন ফিক্স (রিমুভ না করে বডিতে পার্মানেন্ট রাখা যাতে মেমোরি রেজিস্ট্রি ঠিক থাকে)
+      container.querySelectorAll('script').forEach(oldScript => {
+        const newScript = document.createElement('script');
+        if (oldScript.src) {
+          newScript.src = oldScript.src;
+        } else {
+          newScript.text = oldScript.text;
+        }
+        document.body.appendChild(newScript);
+      });
+      
+      window.KernelXLog(`Subsystem pipeline successfully linked to context: [${url}]`);
+    } catch(e) {
+      window.KernelXLog(`Linker Trap: Failed to parse [${url}]. Ensure running via Local Server.`, 'err');
+      
+      // ফলব্যাক ডামি ভিউ যাতে ফাইল মিসিং হলেও ইন্টারফেস নষ্ট না হয়
+      document.getElementById('module-container').innerHTML = `
+        <div style="padding: 20px; border: 1px dashed var(--fault); border-radius: var(--radius); background: rgba(255,92,92,0.02); font-family: var(--font-mono);">
+          <span style="color: var(--fault); font-weight: bold;">[MODULE_LOAD_FAILURE]</span><br>
+          <span style="color: var(--text-dim);">Could not fetch "${url}". Please verify if the file exists in the root directory and you are running through a Local Web Server (Live Server).</span>
+        </div>`;
+    }
+  }
+
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      if (tab.classList.contains('active')) return;
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      loadModule(tab.dataset.page);
+    });
+  });
+
+  // ============ DYNAMIC LOG LOGGER ============
+  window.KernelXLog = function(msg, level = 'ok') {
+    const consoleEl = document.getElementById('log-console');
+    if(!consoleEl) return;
+    const ts = new Date().toLocaleTimeString('en-GB');
+    let color = '#3DDC97';
+    if (level === 'err') color = '#FF5C5C';
+    if (level === 'warn') color = '#FFB454';
+    
+    consoleEl.innerHTML += `<div class="entry"><span class="ts">[${ts}]</span><span style="color:${color}"> ${msg}</span></div>`;
+    consoleEl.scrollTop = consoleEl.scrollHeight;
+  };
+
+  // ============ DYNAMIC LIVE MONITOR OS METRICS ============
+  function startSystemMonitorMetrics() {
+    const cpuEl = document.getElementById('stat-cpu');
+    const ramEl = document.getElementById('stat-ram');
+    const procEl = document.getElementById('stat-proc');
+    const faultsEl = document.getElementById('stat-faults');
+
+    setInterval(() => {
+      // রিয়েল ওএস-এর মতো ডাটা ফ্ল্যাকচুয়েশন সিমুলেশন
+      const simulatedCpu = Math.floor(Math.random() * (24 - 5 + 1)) + 5;
+      const simulatedRam = Math.floor(Math.random() * (52 - 47 + 1)) + 47;
+      
+      cpuEl.textContent = `${simulatedCpu}%`;
+      ramEl.textContent = `${simulatedRam}%`;
+      
+      // গ্লোবাল স্টেট থেকে লাইভ কাউন্টার আপডেট
+      procEl.textContent = window.KernelXState.totalProcesses;
+      faultsEl.textContent = window.KernelXState.pageFaults;
+    }, 1500);
+  }
+
+  // ক্লক এবং আপটাইম কাউন্টার মডিউল
+  setInterval(() => { document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-GB'); }, 1000);
+  let ut = 0; setInterval(() => { ut++; document.getElementById('stat-uptime').textContent = `${String(Math.floor(ut/60)).padStart(2,'0')}:${String(ut%60).padStart(2,'0')}`; }, 1000);
+</script>
+</body>
+</html>
